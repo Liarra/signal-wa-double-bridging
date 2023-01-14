@@ -1,4 +1,7 @@
-# How to unite Signal and WhatsApp groups using Matrix
+---
+title: "How to unite Signal and WhatsApp groups using Matrix"
+
+---
 
 * TOC
 {:toc}
