@@ -74,6 +74,7 @@ Next, set up Whatsapp and Signal bridges for yourself by chatting with Whatsapp 
 If you've done well, you will now have a few moments to enjoy your first milestone - being able to chat with friends from both Signal and Whatsapp using one single interface - Element. 
 
 ![A screenshot depicting interface of Element. On the right are icons of the Signal, Whatsapp, and Matrix accounts of the author, plus two accounts for bridge bots.](https://i.imgur.com/tzcSBU3.png)
+
 *A screenshot depicting interface of Element. On the right are icons of the Signal, Whatsapp, and Matrix accounts of the author, all available to chat from one interface. There are also two accounts for bridge bots.*
 
 
@@ -87,7 +88,7 @@ Technically you could, but in most cases it is way easier to take a different ro
 
 You see, Matrix bridges are still in active development. For now, the default mode of operation for a bridge is to automatically create a *portal* Matrix room that is syncronised with your Signal / Whatsapp chat once you start using it. In our case, that would result in having two separate Matrix rooms, one being a portal for Signal chat and one for Whatsapp chat. This is not what we want; we want to have one Matrix room to unite them[^lotr]. 
 
-![Seperate Matrix rooms for Signal and WhatsApp. The Signal and WhatsApp groups are not united.](https://i.imgur.com/hA2ECBw.png)
+![Separate Matrix rooms for Signal and WhatsApp. The Signal and WhatsApp groups are not united.](https://i.imgur.com/hA2ECBw.png)
 
 
 
@@ -101,6 +102,7 @@ For the rest of this manual we will assume a newly created Whatsapp groupchat.
 Locate the Signal group you want to bridge, or create one in the Signal app if one doesn't already exist. Send a message to that group from the Signal app. Then, the Signal Bridge Bot should create a Matrix portal room for that group. This should happen automatically if you have correctly set up `mautrix-signal`.
 
 ![Screenshots of the same Signal group chat displayed in Signal and Element, side by side.](https://i.imgur.com/pdU6Ha9.png)
+
 *Screenshots of the same Signal group chat displayed in Signal and Element, side by side.*
 
 
@@ -112,6 +114,7 @@ The Whatsapp Bridge Bot should now create a Whatsapp group chat with the same na
 Try sending messages into the portal room via Element. If you've done well, these messages should now appear for you on both platforms! 
 
 ![Screenshots of the same double-bridged Signal group chat displayed in Whatsapp, Element and Signal, side by side.](https://i.imgur.com/Ld2Ot0X.png)
+
 *Screenshots of the same double-bridged Signal group chat displayed in Whatsapp, Element and Signal, side by side. Whatsapp group only contains the last message because it did not exist until !wa create command was issued, and earlier messages do not get synced.*
 
 Nice, we are almost there! Now the last bit: enabling relaying of messages for people who lack a Signal or Whatsapp account.
@@ -140,6 +143,7 @@ The general sequence is the following:
 4. Test that the bridging worked by sending some messages from the Relay Account to your own Signal / Whatsapp account using a Matrix client. If your bridging works, you should also see these messages in your Signal / WhatsApp App.
 
 ![Screenshots of interaction between a human and his Whatsapp Relay account.](https://i.imgur.com/xkozaOq.png)
+
 *Screenshots of interaction between a human and his Whatsapp Relay account. Whatsapp Relay account has sent a PM to the user using Element (left screenshot), which led to the user receiving a message from Whatsapp Relay in Whatsapp (screenshot on the right[^screenshot-edited])*
 
 
@@ -163,6 +167,7 @@ Once relaying is enabled, log in to Matrix with Element as the Signal Relay, and
 To enable relaying, make sure you are logged in as Signal relay[^set-relay], and then type `!signal set-relay` in the double-bridged Matrix room. You can test that it works by logging in as the *Whatsapp relay* (which by definition does not have an account in Signal), and sending a message to the Matrix room or the corresponding Whatsapp chat. You should see this message being delivered to the *Signal* chat by the Signal Relay, like so:
 
 ![Bridged messages between Matrix, Signal, and WhatsApp Showing WhatsApp Relay relaying messages to WhatsApp and Signal Relay relaying messages to Signal.](https://i.imgur.com/TRqVI6Y.png)
+
 *Bridged messages between Matrix, Signal, and WhatsApp Showing WhatsApp Relay relaying messages to WhatsApp and Signal Relay relaying messages to Signal. [^screenshot-edited]*
 
 
@@ -208,6 +213,7 @@ What we'll do is point one of the two bridges to the other Matrix room. It's pro
 That one usually comes from Signal bot and can be very confusing (especially since Whatsapp Relay Account will happily relay this message to the unsuspecting Whatsapp users, who will then experience a major WTF moment). Your course of action depends on the reason the Signal bot gives you.
 
 ![A screenshot of Whatsapp window, where Whatsapp Relay account dutifully relays Signal Bridge Bot errors](https://i.imgur.com/T7kGSnq.png)
+
 *A screenshot[^screenshot-edited] of Whatsapp window, where Whatsapp Relay account dutifully relays Signal Bridge Bot errors.*
 
 
