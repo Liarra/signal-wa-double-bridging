@@ -1,6 +1,7 @@
 # How to unite Signal and WhatsApp groups using Matrix
 
-[toc]
+* TOC
+{:toc}
 
 ## Introduction
 
