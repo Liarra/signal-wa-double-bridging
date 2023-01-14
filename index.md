@@ -3,7 +3,7 @@ title: "How to unite Signal and WhatsApp groups using Matrix"
 
 ---
 
-Written in collaboration with [James Collier](https://james.thecolliers.xyz/)
+Written by Nina Buchina in collaboration with [James Collier](https://james.thecolliers.xyz/)
 
 * TOC
 {:toc}
