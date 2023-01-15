@@ -141,11 +141,10 @@ The general sequence is the following:
 
 1. Log in to Relay's Matrix account using Element or other client [^bots-login];
 2. Set up a bridge by chatting with Signal Bridge Bot or Whatsapp Bridge Bot (depending on which Relay Account you are setting up);
-3. Follow the bot's instructions, but remember to bridge to the **Relay's WhatsApp / Signal account** and not your own;
-4. Test that the bridging worked by sending some messages from the Relay Account to your own Signal / Whatsapp account using a Matrix client. If your bridging works, you should also see these messages in your Signal / WhatsApp App.
+3. Follow the bot's instructions, but remember to bridge to the **Relay's Whatsapp / Signal account** and not your own;
+4. Test that the bridging worked by sending some messages from the Relay Account to your own Signal / Whatsapp account using a Matrix client. If your bridging works, you should also see these messages in your Signal / Whatsapp App.
 
-![Screenshots of interaction between a human and his Whatsapp Relay account.](https://i.imgur.com/vkGWNoo.png)
-
+![Screenshots of interaction between a human and his Whatsapp Relay account.](https://i.imgur.com/skXdRaz.png)
 
 *Screenshots of interaction between a human and his Whatsapp Relay account. Whatsapp Relay account has sent a PM to the user using Element (left screenshot), which led to the user receiving a message from Whatsapp Relay in Whatsapp (screenshot on the right[^screenshot-edited])*
 
