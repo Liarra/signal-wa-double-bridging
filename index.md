@@ -69,6 +69,9 @@ Install a Matrix server and bridges for Signal and Whatsapp[^installmatrix]. The
 
 If you decide to not use the aforementioned playbook, you'd have to install a Matrix server and bridges separately; follow their documentation for details.
 
+> [!IMPORTANT]  
+> An important note on bridges configuration: While both Signal and Whatsapp bridges [support end-to-bridge encryption](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html), in this case it should stay disabled. Otherwise your bridges will not understand messages submitted by each other into the common room, and you risk [getting locked out of Whatsapp](https://github.com/Liarra/signal-wa-double-bridging/issues/1) for spamming error messages.  
+
 Once you have your Matrix installation working, go ahead and [create a Matrix account for yourself](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/registering-users.md). Then login to your brand new Matrix account using one of the [many matrix clients](https://matrix.org/clients/). We used [Element](https://element.io/), as it's the most stable and feature-rich one. Have a look around, play with some settings, pat yourself on the shoulder, as you're halfway there.
 
 Next, set up Whatsapp and Signal bridges for yourself by chatting with Whatsapp Bridge Bot (`@whatsappbot:YOUR_DOMAIN`) and Signal Bridge Bot (`@signalbot:YOUR_DOMAIN`), respectively.  Both bots accept `help` command, which should get you started. When in doubt, consult the [bots' documentation](https://docs.mau.fi/bridges/index.html). 
