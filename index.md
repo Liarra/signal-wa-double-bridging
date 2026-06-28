@@ -132,7 +132,7 @@ Create accounts for your Relays on Signal and Whatsapp using your spare simcard.
 #### Matrix
 Create a Matrix account for each of the Relays. Depending on your installation, account creation can be performed with [Synapse Admin](https://github.com/Awesome-Technologies/synapse-admin), with help of the [same Ansible script you used to install Matrix](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/registering-users.md), or by [sending a special HTTP request](https://matrix-org.github.io/synapse/latest/admin_api/register_api.html) to your server.
 
-In our setup, we named the Relays `@signal-relay` and `@whatsapp-relay`. You could check that the accounts are created successfully by chatting with them from your own Matrix account. You should also have these accounts block each other so that error messages aren't relayed in a loop.
+In our setup, we named the Relays `@signal-relay` and `@whatsapp-relay`. You could check that the accounts are created successfully by chatting with them from your own Matrix account. You could have these accounts [ignore](https://discourse.ubuntu.com/t/how-to-manage-your-ignore-list/43641) each other so that error messages aren't relayed in a loop.
 
 #### Bridge
 Now that each Relay has a Matrix account and a Signal / Whatsapp account, we need to let our system know that these are in fact related to one another. We achieve this by setting up Whatsapp / Signal bridges for both of the relays.
