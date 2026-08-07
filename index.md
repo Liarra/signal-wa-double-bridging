@@ -1,261 +1,461 @@
 ---
 title: "How to unite Signal and WhatsApp groups using Matrix"
-
 ---
 
-Written by Nina Buchina in collaboration with [James Collier](https://james.thecolliers.xyz/)
+Written by Nina Buchina in collaboration with
+[James Collier](https://james.thecolliers.xyz/).
+
+> **Last reviewed: August 2026.** This guide assumes current Go/bridgev2
+> releases of [mautrix-signal](https://github.com/mautrix/signal) and
+> [mautrix-whatsapp](https://github.com/mautrix/whatsapp). In particular, the
+> supported [`bridge` command](https://docs.mau.fi/bridges/general/relay-mode.html#bridging-existing-rooms)
+> for attaching an existing remote chat requires bridge version 26.04 or newer.
+> Older installations use different commands and
+> database schemas; upgrade them instead of applying the SQL instructions from
+> old versions of this article.
 
 * TOC
 {:toc}
 
 ## Introduction
 
-Our friends and family are spread over the globe so communication with them over the internet is especially important to us. But if your friends and family are relatively close, chances are communication with them over the internet is also important to you. Luckily today we have a great variety of apps and services to accomplish this. Unfortunately this is also a problem because many of these services are "walled gardens" that do not follow the open communication infrastructure of the early internet. For better or worse, these services force users to use their app. So very often we end up with 3 or 4 communication apps with non-overlapping groups of friends on each app. 
-> Do I use Signal to talk to Amy, or do I use WhatsApp? Oh did she move to Telegram?
+Our friends and family are spread over different chat services. Signal users
+cannot normally participate in WhatsApp groups, and WhatsApp users cannot
+normally participate in Signal groups. This guide describes how to use a
+self-hosted Matrix room as the common transport between one group on each
+network.
 
-This is where [Matrix](https://matrix.org) comes in. Matrix is _"an open network for secure, decentralized communication"_.
+[Matrix](https://matrix.org) is an open protocol for decentralized
+communication. A Matrix room can be linked to a chat on another network using a
+bridge. By linking the same Matrix room to both a Signal group and a WhatsApp
+group, messages can travel between the two groups.
 
-This fits the vision of the early internet. Anyone can communicate with anyone, no matter which service they're using. Think e-mail but for instant messaging, voice, and video calls, but better than e-mail because it is _secure by design_.
+This is an unusual topology, not a formally integrated Signal/WhatsApp product.
+Test it with disposable groups before trusting it with an established community.
 
-In this manual we document the steps we followed to self-host a Matrix service and use it to connect group chats in Signal and WhatsApp.
+## Intended audience and scope
 
-## Our intended audience
+This guide assumes that you are an experienced Linux user with some affinity for
+self-hosting and system administration. It is not a general installation guide
+for a Matrix homeserver or mautrix bridges; the upstream projects already
+maintain those.
 
-We assume that you are an experienced Linux user with some affinity for self-hosting and system administration. We tried to make all the steps in this guide as clear and easy to follow as possible, but these skills will likely be needed when something inevitably goes wrong.
+The guide covers:
 
-Note that this manual is **not** a guide on how to install Matrix, Synapse, or any Matrix Bridges. For these subjects we refer to to the excellent documentation that already exists.
+* joining one Signal group and one WhatsApp group through a single Matrix room;
+* using relay accounts for people who do not have accounts on both remote
+  networks;
+* attaching existing remote groups without editing the bridge database;
+* recovering and diagnosing the arrangement with current bridge commands.
 
-## What is Matrix
+## How it works
 
-Matrix is an [open standard comunications protocol](https://spec.matrix.org/latest/). It has a reference service implementation that is called [Synapse](https://matrix.org/docs/projects/server/synapse). Although matrix.org hosts a Matrix "homeserver", anyone can run their own Matrix server and users from every Matrix server can chat with users from all other Matrix servers.
-
-You don't even have to run Synapse or the default client [Element](https://element.im). Because the protocol is open and freely implementable there are several existing [servers](https://codeberg.org/yarmo/delightful-matrix#server-implementations) and [clients](https://codeberg.org/yarmo/delightful-matrix#clients) to choose from.
-
-## General idea
-
-Suppose we have two group chats: one is a Signal group, another is a Whatsapp chat. In order to unite them and get the different platform users to talk to one another, we need to have *something* in between that communicates with both platforms, sending those cat pictures back and forth. That *something* is going to be a Matrix "room".
-
-A Matrix room can be linked to a chat on some other platform with help of special software called a [Bridge](https://matrix.org/bridges/). For this exercise, we are going to use a [Whatsapp bridge](https://github.com/mautrix/whatsapp) and a [Signal bridge](https://github.com/mautrix/signal). If we *bridge* our Matrix room to both the Signal group and the Whatsapp group, then this bridged Matrix room will enable communication between the two chats.
+Suppose we have one Signal group and one WhatsApp group. A Matrix room sits in
+the middle, and each mautrix bridge links its remote group to that same room.
 
 ![A cartoon representation of bridged chat rooms. The Matrix room is in the middle connecting WhatsApp and Signal.](https://i.imgur.com/4q1urLH.png)
 
-Seems simple, right? Collect messages from both chats into one Matrix room, and let Matrix send the messages from the Signal group to a Whatsapp chat and the other way around. But there is a big caveat.
+There is an unavoidable identity problem. A WhatsApp user who has no Signal
+account cannot be the sender of a Signal message, and vice versa. Each remote
+group therefore needs a service account that sends messages on behalf of people
+who are absent from that network. Mautrix calls this
+[**relay mode**](https://docs.mau.fi/bridges/general/relay-mode.html).
+
+You need two remote relay identities:
+
+* a Signal account that is a member of the Signal group;
+* a WhatsApp account that is a member of the WhatsApp group.
+
+Those two remote accounts may be managed by one dedicated Matrix account.
+Current mautrix documentation explicitly permits
+[sharing a dedicated Matrix relay account](https://docs.mau.fi/bridges/general/relay-mode.html#shared-relays)
+between different bridges. Separate Matrix users are still possible if you want
+administrative isolation, but they are not required.
+
+### Security boundary
+
+Signal and WhatsApp still encrypt traffic on their respective networks, and the
+Matrix room may use end-to-bridge encryption. However, this arrangement is
+**not** end-to-end encrypted from a Signal participant to a WhatsApp
+participant. The bridges must decrypt each incoming message and submit it to the
+other network. The homeserver and bridge operators, bridge databases, logs,
+backups, and remote relay accounts are therefore part of the trust boundary.
+
+Every participant should also understand that messages and attachments are
+copied to a second service with a different membership list, retention policy,
+and operator.
+
+## Prerequisites
+
+1. **A reachable Matrix homeserver.** Follow your deployment project's actual
+   requirements for DNS, HTTPS, ports, and federation. A dedicated public IPv4
+   address is not an intrinsic requirement of the bridges.
+2. **Current mautrix-signal and mautrix-whatsapp installations.** Version 26.04
+   or newer is required for the `bridge` workflow used below.
+3. **Your normal Signal and WhatsApp accounts.** Logging your own Matrix user
+   into both bridges is useful for administration and for discovering chat IDs.
+4. **Two remote relay accounts.** Signal and WhatsApp registration still require
+   phone numbers. The same spare number and physical phone can normally host
+   both accounts, but each service has its own account and linked-device
+   lifecycle.
+5. **One dedicated Matrix relay user**, for example `@bridge-relay:YOUR_DOMAIN`.
+   This user will own both bridge logins.
+6. **A real primary phone is strongly recommended.** WhatsApp warns that
+   emulators, VoIP numbers, new accounts, and suspicious outbound activity all
+   increase ban risk.
+
+## 0. Install and configure the bridges
+
+Install a Matrix homeserver and both bridges. One maintained option is
+[matrix-docker-ansible-deploy](https://github.com/spantaleev/matrix-docker-ansible-deploy):
+
+* [mautrix-signal playbook documentation](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-signal.md)
+* [mautrix-whatsapp playbook documentation](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-whatsapp.md)
+
+If you install manually, follow the current
+[mautrix bridge documentation](https://docs.mau.fi/bridges/). Do not copy old
+sample configuration keys from this article: bridgev2 changed the configuration
+layout.
+
+For both bridges:
+
+1. enable relay mode under `bridge.relay.enabled`;
+2. give the human administrators the `admin` permission and intended room users
+   at least the `relay` permission;
+3. decide whether only bridge admins may select relays. `admin_only` is `true`
+   by default;
+4. allow each bridge bot to join the room and give it enough power to write
+   bridge state, change room settings, and invite users.
+
+The bridges can operate in encrypted Matrix rooms when
+[end-to-bridge encryption](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html)
+is configured correctly. Current release binaries and Docker images include
+encryption support. Set `encryption.allow: true` on both bridges; if the
+homeserver forces room encryption, also set `encryption.default: true`. With
+next-generation Matrix authentication, review the current `msc4190`
+requirements.
+
+Encryption adds more key-sharing failure modes to an already unconventional
+topology. Start with test groups, confirm delivery in both directions, restart
+both bridges, and confirm it again before adding real users. Disabling
+Matrix-room encryption remains a valid operational trade-off, but it is no
+longer a technical requirement.
+
+## 1. Log your Matrix account into both bridges
+
+Open private chats with the bridge bots, normally:
+
+* `@signalbot:YOUR_DOMAIN`
+* `@whatsappbot:YOUR_DOMAIN`
+
+For Signal, follow the current
+[authentication instructions](https://docs.mau.fi/bridges/go/signal/authentication.html)
+and send:
 
-In both Signal and Whatsapp, every message has a sender. **If a person doesn't have a Signal account, they cannot send a message to any Signal group**. Same story with Whatsapp. So what should happen if a Whatsapp user sends a message into our Whatsapp chat? How would her message show up in a bridged Signal group?
+```text
+login
+```
 
-There is no clever answer to this question. You need *some* user, who already has a WhatsApp and Signal account, to be the sender of every message in your group. Therefore, in order to deliver messages from one platform to another, we are going to need a _"service account"_ on each of them. These service accounts will send messages to Signal on behalf of WhatsApp users, and to WhatsApp on behalf of Signal users. They will also need access to the Matrix room in order to read the messages that are not sent from their home platform (WhatsApp or Signal). From now on, we are going to call these service accounts *"Relays"*.
+Then scan the QR code from **Linked Devices** in the primary Signal app. If
+history transfer is enabled, Signal may offer to transfer recent history.
+Primary-device registration through mautrix-signal is no longer supported.
 
-To summarise: we are going to create a Matrix room and bridge it to a Whatsapp chat and to a Signal group. The messages for users who are not present on one of the WhatsApp or Signal will be relayed by two Relay Accounts (one for WhatsApp, one for Signal). The Signal relay will need its own Matrix account and a Signal account. The WhatsApp relay will need its own Matrix account and a WhatsApp account.
+For WhatsApp, follow the current
+[authentication instructions](https://docs.mau.fi/bridges/go/whatsapp/authentication.html)
+and send either:
 
+```text
+login qr
+```
 
-## Pre-requisites
+or:
 
-1. **A server on which you can install Matrix software.**
-This can be a Virtual Private Server (VPS), or your old laptop. The important thing is that it has a dedicated external IP address. [Check out the detailed requirements.](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/prerequisites.md)
+```text
+login phone
+```
 
-2. **A domain name.** You can use a subdomain of an existing domain name, if you have one.
+Follow the bot's QR, pairing-code, and possible passkey-verification
+instructions. WhatsApp normally creates portals after login and can backfill
+recent messages. Signal creates or backfills portals after history transfer or
+as new messages arrive.
 
-3. **Accounts on Signal and Whatsapp.** We assume you already have them, since you are reading this article. But just to make things clear - you will need to be registered on both platforms yourself. 
+## 2. Attach both remote groups to one Matrix room
 
-4. **A phone number that is not registered with Signal or Whatsapp.**
-Relay Accounts will *relay* messages between Whatsapp and Signal. This means that you'll need to register separate accounts for them - one in Signal and one in Whatsapp. This will require a spare SIM card [^simcard]. 
+The safest modern approach is to attach existing remote groups using the
+supported `bridge` command. No direct database editing is necessary or
+acceptable.
 
-5. **A spare phone or emulator on which you can install Signal [^phoneforsignal] and WhatsApp for the Relay Accounts.** Likewise, for Relay accounts to be able to use Whatsapp and Signal, they need their own device. 
+### Choose the target Matrix room
 
-## Steps
+This example keeps the existing Signal portal as the common room and attaches an
+existing WhatsApp group to it. The opposite direction works too: swap the
+command prefixes and use the WhatsApp portal as the target.
 
-### 0. Installation
-Install a Matrix server and bridges for Signal and Whatsapp[^installmatrix]. The easy way to do this is by using this super helpful Ansible playbook: https://github.com/spantaleev/matrix-docker-ansible-deploy. We went for a default Synapse homeserver and enabled Signal and Whatsapp bridges, as described in the [docs](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/README.md); however, the playbook is highly configurable. Make sure to study the playbook's docs so that you don't miss out on any cool tweaks or features.
+1. Open the Signal group in the Signal app and send a message if its Matrix
+   portal does not exist yet.
+2. Open the resulting Signal portal in Matrix.
+3. Make sure the room has a name. Signal group names are required and limited to
+   32 characters if you later create a Signal group from a Matrix room.
+4. Invite the WhatsApp bridge bot to the Signal portal.
+5. Give both bridge bots sufficient power. As a room or bridge administrator,
+   the following bridge-specific helpers are useful:
 
-If you decide to not use the aforementioned playbook, you'd have to install a Matrix server and bridges separately; follow their documentation for details.
+   ```text
+   !signal set-pl 100
+   !wa set-pl 100
+   ```
 
-> An important note on bridges configuration: While both Signal and Whatsapp bridges [support end-to-bridge encryption](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html), in this case it should stay disabled. Otherwise your bridges will not understand messages submitted by each other into the common room, and you risk [getting locked out of Whatsapp](https://github.com/Liarra/signal-wa-double-bridging/issues/1) for spamming error messages.  
+### Find the WhatsApp chat ID
 
-Once you have your Matrix installation working, go ahead and [create a Matrix account for yourself](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/registering-users.md). Then login to your brand new Matrix account using one of the [many matrix clients](https://matrix.org/clients/). We used [Element](https://element.io/), as it's the most stable and feature-rich one. Have a look around, play with some settings, pat yourself on the shoulder, as you're halfway there.
+Open the existing Matrix portal for the WhatsApp group and run:
 
-Next, set up Whatsapp and Signal bridges for yourself by chatting with Whatsapp Bridge Bot (`@whatsappbot:YOUR_DOMAIN`) and Signal Bridge Bot (`@signalbot:YOUR_DOMAIN`), respectively.  Both bots accept `help` command, which should get you started. When in doubt, consult the [bots' documentation](https://docs.mau.fi/bridges/index.html). 
+```text
+!wa id
+```
 
-If you've done well, you will now have a few moments to enjoy your first milestone - being able to chat with friends from both Signal and Whatsapp using one single interface - Element. 
+Save the returned remote chat ID. If there is no portal yet, send a message in
+the WhatsApp group and wait for the bridge to discover it.
 
-![A screenshot depicting interface of Element. On the right are icons of the Signal, Whatsapp, and Matrix accounts of the author, plus two accounts for bridge bots.](https://i.imgur.com/tzcSBU3.png)
+### Plumb the WhatsApp group into the target room
 
-*A screenshot depicting interface of Element. On the right are icons of the Signal, Whatsapp, and Matrix accounts of the author, all available to chat from one interface. There are also two accounts for bridge bots.*
+Return to the Signal portal and run:
 
+```text
+!wa bridge <WHATSAPP_CHAT_ID>
+```
 
-That's pretty cool already! Now let's get to uniting the two...
+If you have multiple WhatsApp logins, make the login explicit:
 
-### 1. Create group chats on Signal and Whatsapp
+```text
+!wa bridge <LOGIN_ID> <WHATSAPP_CHAT_ID>
+```
 
-"Create group chats? I thought you said you could unite existing groups?"
+Use `!wa list-logins` in the bot chat to obtain login IDs.
 
-Technically you could, but in most cases it is way easier to take a different route.
+If the WhatsApp group already has another Matrix portal, the bridge refuses to
+replace it. After verifying both room and chat IDs, run:
 
-You see, Matrix bridges are still in active development. For now, the default mode of operation for a bridge is to automatically create a *portal* Matrix room that is syncronised with your Signal / Whatsapp chat once you start using it. In our case, that would result in having two separate Matrix rooms, one being a portal for Signal chat and one for Whatsapp chat. This is not what we want; we want to have one Matrix room to unite them[^lotr]. 
+```text
+!wa bridge --overwrite <WHATSAPP_CHAT_ID>
+```
 
-![Separate Matrix rooms for Signal and WhatsApp. The Signal and WhatsApp groups are not united.](https://i.imgur.com/hA2ECBw.png)
+`--overwrite` is destructive on the Matrix side: it tombstones and deletes the
+old WhatsApp portal room before assigning the remote chat to the target room. It
+does not delete the WhatsApp group. Preserve anything you need from the old
+Matrix room first.
 
+The target Matrix room is now linked to both remote groups. Send test messages
+from Matrix, Signal, and WhatsApp and verify exactly one copy arrives at each
+destination.
 
+![Screenshots of the same double-bridged group displayed in WhatsApp, Element, and Signal.](https://i.imgur.com/Ld2Ot0X.png)
 
-So what we are going to do about it? First, we will let a Signal bridge create a Matrix portal room for a Signal group. Then, we will use Whatsapp Bot's `create` command to create a **new Whatsapp chat** linked to that same Matrix room. This means that your Whatsapp friends will have to move chats, though.
+Old Matrix events are not moved from one portal room to another. Remote-history
+backfill is a separate feature and depends on bridge configuration and what the
+remote network makes available.
 
-If you don't have that kind of good will from your Whatsapp'ians, there is [a way to bridge an existing Whatsapp chat to the existing Matrix room](https://github.com/mautrix/whatsapp/issues/202#issuecomment-1030806415); however, it will require you to get your hands dirty with editing your bridge's SQL database records. There is an [MR that, once merged, will make this task easier](https://github.com/mautrix/whatsapp/pull/512), but at the time of writing this article it has not landed yet.
+### Creating a new remote group instead
 
-For the rest of this manual we will assume a newly created Whatsapp groupchat. 
+Both bridges expose `create-group`; `create` remains an alias for compatibility:
 
-#### Signal
-Locate the Signal group you want to bridge, or create one in the Signal app if one doesn't already exist. Send a message to that group from the Signal app. Then, the Signal Bridge Bot should create a Matrix portal room for that group. This should happen automatically if you have correctly set up `mautrix-signal`.
+```text
+!wa create-group
+!signal create-group
+```
 
-![Screenshots of the same Signal group chat displayed in Signal and Element, side by side.](https://i.imgur.com/pdU6Ha9.png)
+The command creates a remote group for the current Matrix room and imports
+eligible room metadata and participants. There are two important asymmetries:
 
-*Screenshots of the same Signal group chat displayed in Signal and Element, side by side.*
+* WhatsApp requires at least one WhatsApp-resolvable participant in addition to
+  the creator. Signal ghosts and the Signal bridge bot do not count.
+* Signal permits a creator-only group, but requires a non-empty name of at most
+  32 characters.
 
+Consequently, the old recipe—invite only the WhatsApp bot to a Signal portal and
+run `!wa create`—may now fail with no eligible WhatsApp participant. Bridging an
+existing WhatsApp group is usually cleaner.
 
-#### Whatsapp
-Invite the Whatsapp Bridge Bot (`@whatsappbot:YOUR_DOMAIN`) to the Matrix portal room that got created in the previous step. Make Whatsapp Bridge Bot create a new Whatsapp group chat by sending a message `!wa create` in the portal room. 
+## 3. Create and connect the relay identities
 
-The Whatsapp Bridge Bot should now create a Whatsapp group chat with the same name as your Signal chat and its Matrix portal room. This Matrix room is now _"double bridged"_.
+Create the Signal and WhatsApp relay accounts on their primary phone. Add the
+Signal relay to the Signal group and the WhatsApp relay to the WhatsApp group
+using the native apps.
 
-Try sending messages into the portal room via Element. If you've done well, these messages should now appear for you on both platforms! 
+Create one ordinary Matrix account such as `@bridge-relay:YOUR_DOMAIN`. Log into
+Matrix as that user and authenticate it to both bridge bots:
 
-![Screenshots of the same double-bridged Signal group chat displayed in Whatsapp, Element and Signal, side by side.](https://i.imgur.com/Ld2Ot0X.png)
+* send `login` to the Signal bot and link the Signal relay account;
+* send `login qr` or `login phone` to the WhatsApp bot and link the WhatsApp
+  relay account.
 
-*Screenshots of the same double-bridged Signal group chat displayed in Whatsapp, Element and Signal, side by side. Whatsapp group only contains the last message because it did not exist until !wa create command was issued, and earlier messages do not get synced.*
+Do not confuse the dedicated Matrix user with bridge-managed ghost users. The
+Matrix account owns the logins; the two remote accounts actually send the
+relayed messages.
 
-Nice, we are almost there! Now the last bit: enabling relaying of messages for people who lack a Signal or Whatsapp account.
+Invite the dedicated Matrix relay user to the double-bridged room. Then obtain
+each remote login ID with:
 
+```text
+!signal list-logins
+!wa list-logins
+```
 
-### 2. Create Relay accounts on Singal and Whatsapp
+For unattended operation, add the relevant login ID to each bridge's
+`bridge.relay.default_relays` list. You may also add those IDs to
+`bridge.portal_create_filter.always_deny_from_login` so the relay logins do not
+create unwanted standalone portal rooms.
 
-#### Signal and Whatsapp
-Create accounts for your Relays on Signal and Whatsapp using your spare simcard. They can share the same phone number and the same device. _Don't forget to save their credentials and pin codes to a safe location!_
+## 4. Enable relay mode in the common room
 
-#### Matrix
-Create a Matrix account for each of the Relays. Depending on your installation, account creation can be performed with [Synapse Admin](https://github.com/Awesome-Technologies/synapse-admin), with help of the [same Ansible script you used to install Matrix](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/registering-users.md), or by [sending a special HTTP request](https://matrix-org.github.io/synapse/latest/admin_api/register_api.html) to your server.
+With the relay identities present in their respective remote groups, set each
+login as the relay. A bridge administrator can do this from the common room:
 
-In our setup, we named the Relays `@signal-relay` and `@whatsapp-relay`. You could check that the accounts are created successfully by chatting with them from your own Matrix account. You could have these accounts [ignore](https://discourse.ubuntu.com/t/how-to-manage-your-ignore-list/43641) each other so that error messages aren't relayed in a loop.
+```text
+!signal set-relay <SIGNAL_LOGIN_ID>
+!wa set-relay <WHATSAPP_LOGIN_ID>
+```
 
-#### Bridge
-Now that each Relay has a Matrix account and a Signal / Whatsapp account, we need to let our system know that these are in fact related to one another. We achieve this by setting up Whatsapp / Signal bridges for both of the relays.
+If `admin_only` is `false`, the dedicated Matrix relay user may instead run the
+command without an argument under its own account. With the default
+`admin_only: true`, an ordinary relay user cannot necessarily appoint itself.
 
-Remember setting up Signal and Whatsapp bridges for your own account in step 0? Now you will have to do the same for each of the Relays.
+Test the full path:
 
-The general sequence is the following:
+1. send from a Signal-only participant and confirm delivery to WhatsApp;
+2. send from a WhatsApp-only participant and confirm delivery to Signal;
+3. send from Matrix as a user who is not logged into either bridge;
+4. test text, an image, a reply, an edit, and a deletion separately.
 
-1. Log in to Relay's Matrix account using Element or other client [^bots-login];
-2. Set up a bridge by chatting with Signal Bridge Bot or Whatsapp Bridge Bot (depending on which Relay Account you are setting up);
-3. Follow the bot's instructions, but remember to bridge to the **Relay's Whatsapp / Signal account** and not your own;
-4. Test that the bridging worked by sending some messages from the Relay Account to your own Signal / Whatsapp account using a Matrix client. If your bridging works, you should also see these messages in your Signal / Whatsapp App.
+Do not assume every event type has perfect semantic parity. In particular,
+reactions from relayed users are not bridged because the remote relay account
+cannot preserve both sender identity and multiple identical reactions.
 
-![Screenshots of interaction between a human and his Whatsapp Relay account.](https://i.imgur.com/skXdRaz.png)
+## 5. Add participants and operate the room
 
-*Screenshots of interaction between a human and his Whatsapp Relay account. Whatsapp Relay account has sent a PM to the user using Element (left screenshot), which led to the user receiving a message from Whatsapp Relay in Whatsapp (screenshot on the right[^screenshot-edited])*
+Populate both remote groups through their native apps. Keep the membership lists
+and administrator policies aligned manually; neither remote service knows that
+the other group exists.
 
+Tell participants:
 
-#### Cordially invite the Relays
-Once both of your Relay Accounts are set up, it's time to invite them to our bridged room, so that they may do this message-relaying job we hired them for.
+* which content is copied to the other network;
+* that relayed messages are attributed using a display-name prefix rather than
+  the sender's native identity;
+* who operates the homeserver, bridges, and relay accounts;
+* how long logs, database records, media, and backups are retained;
+* that reactions and some rich-message features may be lost or simplified.
 
-Go to your Signal group in the Signal app on your phone / PC and invite the Signal account of the Signal Relay to this group. Do the same for the Whatsapp group chat and the Whatsapp Relay Account.
+## Recovery and troubleshooting
 
-Now, login to your own Matrix account in Element and open our double-bridged Matrix room that we have created in Step 1. Invite both Relays to this room. **Make sure to invite the original Matrix accounts (`@signal-relay:YOUR_DOMAIN` and `@whatsapp-relay:YOUR_DOMAIN`)**. There should already be "puppet" accounts for both relays that Signal and Whatsapp Bridges have created. Ignore these.
+### A remote group is attached to the wrong Matrix room
 
-Now we have created two Relay Accounts that can send messsages to Signal and WhatsApp, as well as read and send messages in the bridged Matrix room. The last step is to instruct them to relay messages from Matrix back to their own platforms.
+Do not edit SQL. Current bridgev2 uses a different schema from old bridge
+releases, and manual writes can corrupt unrelated portals.
 
-### 3. Enable relaying in your Matrix room
+1. In the current portal, run `!signal id` or `!wa id` and save the remote chat
+   ID.
+2. Invite the relevant bridge bot into the intended Matrix room.
+3. Ensure the bot has sufficient room power.
+4. In the intended room, run the appropriate command:
 
-Luckily, both the Signal Bridge Bot and the Whatsapp Bridge Bot come with relaying functionality. Messages sent into the bridged room from Matrix users who are not present in Signal / Whatsapp will be relayed to Signal / Whatsapp. The only thing they need from you is to specify which account on their platform should appear as author of these messages. Luckily, we just created our Relays especially for this purpose!
+   ```text
+   !signal bridge --overwrite <SIGNAL_CHAT_ID>
+   !wa bridge --overwrite <WHATSAPP_CHAT_ID>
+   ```
 
-First of all, make sure that you have enabled the relaying feature in the bot's settings. If you are using Ansible playbook, check out this section of docs [for Signal](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-signal.md) and [for WhatsApp](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-whatsapp.md). Otherwise, revisit the documentation of the bridges.
+5. Read the warning carefully: overwrite deletes the old Matrix portal room.
 
-Once relaying is enabled, log in to Matrix with Element as the Signal Relay, and go to our double-bridged Matrix room. In bridged Matrix rooms you can send special messages to issue commands to the bridge bots. For instance, to address the Signal Bridge Bot, start your message with `!signal`. Likewise, to address the Whatsapp Bridge Bot, use `!wa` prefix. 
+The old article edited a `portals.relay_user_id` field that current bridgev2
+does not have. Current bridgev2 uses a `portal` table keyed by bridge ID, remote
+chat ID, and receiver, with the Matrix room in `mxid` and relay selection in
+`relay_login_id`. Besides targeting an obsolete schema, the old example's
+`WHERE mxid = mxid` condition would match every row whose `mxid` was not null.
+It was a loaded gun pointed at the entire portal table.
 
-To enable relaying, make sure you are logged in as Signal relay[^set-relay], and then type `!signal set-relay` in the double-bridged Matrix room. You can test that it works by logging in as the *Whatsapp relay* (which by definition does not have an account in Signal), and sending a message to the Matrix room or the corresponding Whatsapp chat. You should see this message being delivered to the *Signal* chat by the Signal Relay, like so:
+### A portal exists but its metadata or membership is stale
 
-![Bridged messages between Matrix, Signal, and WhatsApp Showing WhatsApp Relay relaying messages to WhatsApp and Signal Relay relaying messages to Signal.](https://i.imgur.com/TRqVI6Y.png)
+Run the relevant portal resync in the affected room:
 
-*Bridged messages between Matrix, Signal, and WhatsApp Showing WhatsApp Relay relaying messages to WhatsApp and Signal Relay relaying messages to Signal. [^screenshot-edited]*
+```text
+!signal sync-portal
+!wa sync-portal
+```
 
+Then inspect the affected bridge service's logs. Restarting the Matrix
+homeserver is not a useful first response to a connector-specific failure.
 
-Once that worked, repeat this step for the Whatsapp Relay (issue `!wa set-relay` command as the Whatsapp Relay Account), and use the *Signal* relay to test the connectivity.
+### WhatsApp disconnected the linked device
 
-### 4. Invite everyone and chat!
+The bridge uses WhatsApp's linked-device interface. If the primary phone is
+offline for more than about two weeks, linked devices may be disconnected;
+[mautrix-whatsapp warns](https://docs.mau.fi/bridges/go/whatsapp/authentication.html)
+after roughly 12 days without phone data.
 
-Populate both Signal and WA groups on their respective platforms.
-Enjoy seamless delivery of cat memes across platforms, and maybe use this opportunity to lure some people into your Matrix server ;-)
+Bring the primary phone online. If the login is no longer valid, use `logout` in
+the WhatsApp bot chat and authenticate again with `login qr` or `login phone`.
+Do not assume the old bare `login` command selects the correct method.
 
-## When something goes wrong
-What went wrong with our installation:
-### 1. Whatsapp logged out our relay account. 
-With the current way it's implemented, Whatsapp requires all users to appear online on their primary device at least once every 2 weeks. Otherwise, the user will be logged out of their linked devices.
+### Signal disconnected the linked device
 
-**How to fix it:** Turn on a device with the Whatsapp account. Re-login the Relay to the Whatsapp bridge:
-1. Log in to Matrix as the Whatsapp Relay Account (`@whatsapp-relay:YOUR_MATRIX_DOMAIN`);
-2. Text `login` to Whatsapp Bridge bot (`@whatsappbot:YOUR_MATRIX_DOMAIN`);
-3. Use your device with the relay accounts to scan the presented QR code;
-4. Relaying should be restored automatically.
+[Signal requires](https://support.signal.org/hc/en-us/articles/360007320551-Linked-Devices)
+the primary phone to come online at least once every 30 days and unlinks linked
+devices after 45 days of inactivity. If relinking is required, send `login` to
+the Signal bot and scan the new QR code from the primary app. The old
+`link matrix` command and signald-specific recovery steps no longer apply;
+mautrix-signal was rewritten in Go and stopped using signald in 2024.
 
-### 2. Whatsapp / Signal group got un-bridged.
-Tough luck.
-What's probably going to happen is the Bridge bot will create a new Matrix room for the group that got un-bridged. This is very sad for you, because you wanted one group / room to begin with! If only there was a way to link the original room back to its Signal / Whatsapp counterpart...
+### Encrypted-room messages fail to bridge
 
-For Whatsapp bridge, there are currently plans of making it possible by issuing a special command to the Bridge Bot. However, until this is merged, you'll have to get your hands dirty with database queries. Ew, look at all this SQL you have over you!
+Confirm that encryption is allowed on **both** bridges and that both bridge
+devices receive the room keys. Review `self_sign`, client device-verification
+policy, and `msc4190` when applicable. Test from the same client in an
+unencrypted disposable room to distinguish a crypto failure from a
+remote-network failure.
 
-**How to fix it:**
-What we'll do is point one of the two bridges to the other Matrix room. It's probably better to do this on the Whatsapp bridge, because it seems more robust.
+### Messages loop, duplicate, or bridge notices leak
 
-0. **!! Make a backup of your database !!**
-1. Find the internal id of the current Matrix room bridged to your Whatsapp chat. We'll call this id `id_W`.
-2. Find the internal id of the Matrix room bridged to the Signal group. We'll call this id `id_S`.
-3. Find a row in the `portals` table that contains `id_W`.
-   `SELECT * FROM portals WHERE relay_user_id = id_W;`
-   Note down the `mxid` (unique id of the row), we'll use it in the next step (`saved_mxid`).
-5. Replace `id_W` in this row with `id_S`.
-   `UPDATE portals SET relay_user_id = id_S WHERE mxid = mxid;`
-7. Your room bridged with Signal should now be re-bridged with your Whatsapp chat.
+Temporarily stop one relay path while diagnosing:
 
-### 3. ⚠ Your message was not bridged
+```text
+!signal unset-relay
+```
 
-That one usually comes from Signal bot and can be very confusing (especially since Whatsapp Relay Account will happily relay this message to the unsuspecting Whatsapp users, who will then experience a major WTF moment). Your course of action depends on the reason the Signal bot gives you.
+or:
 
-![A screenshot of Whatsapp window, where Whatsapp Relay account dutifully relays Signal Bridge Bot errors](https://i.imgur.com/T7kGSnq.png)
+```text
+!wa unset-relay
+```
 
-*A screenshot[^screenshot-edited] of Whatsapp window, where Whatsapp Relay account dutifully relays Signal Bridge Bot errors.*
+Verify that there is only one Signal portal and one WhatsApp portal attached to
+the Matrix room, and that the two native relay accounts are members only where
+intended. Inspect the bridge logs and the actual error. Do not blindly unlink
+accounts or restart Synapse because an old troubleshooting section mentioned a
+Java or signald exception; those stacks cannot come from the current Go bridge.
 
+## Operational maintenance
 
-#### UnknownGroupError: unknown group requested
+This is infrastructure, not a one-time incantation.
 
-**How to fix it:**
-* If the Signal Relay Account's safety number changed, get some user of the group to confirm it
-* Kick and re-add the Signal Relay Account to the group using the Signal app.
-* Log the Signal Relay Account out of the Signal bridge by sending the message, `logout` to the Signal Bridge Bot (`@signalbot:YOUR_MATRIX_DOMAIN`). Then login again by texting it `link matrix` and scanning the QR code with the Relay Account's device. Don't forget to remove the old linked device from Relay Account's Signal app.
-
-
-#### Unexpected end of stream
-Actually, the full output will look more like this: `⚠ Your message was not bridged: org.whispersystems.signalservice.api.push.exceptions.PushNetworkException, java.net.ProtocolException: org.whispersystems.signalservice.api.push.exceptions.PushNetworkException: java.net.ProtocolException: unexpected end of stream`
-
-This often happens when a Whatsapp user posts a link and a preview of that link is being generated. We found no real way to fight this.
-
-In other cases, Signal bot will give this error in response to any message in Matrix room. Sadly, we found no better way of fighting it than to restart the homeserver and / or the Signal bridge service. 
-
-**How to fix it:**
-If you want the Signal bridge to get better, consider contributing to these repositories: [Signal-Matrix bridge](https://github.com/mautrix/signal), [signald](https://gitlab.com/signald/signald).
+* Keep the homeserver and both bridges current, and read both bridge changelogs
+  before major upgrades.
+* Monitor the primary phones' connectivity and linked-device state.
+* Back up bridge configuration and databases, but test restoration rather than
+  merely accumulating hopeful archives.
+* Re-run the three-direction delivery test after upgrades, room encryption
+  changes, membership changes, or relinking either account.
+* Use each bot's `help` output as the authority for commands supported by the
+  version you actually run.
 
 ## Conclusion
 
-At the time of publishing this article, our bridged chat has existed for 8 months with little trouble (apart from what is described in the previous section). Sometimes we seem to lose a message or two, and software updates of the Synapse and the bridges are always a bit of nerve-wracking moment, but overall it works surprisingly well. 
+Matrix can still join Signal and WhatsApp groups effectively, but the mechanism
+is less primitive than it was when this article was first published. Existing
+groups can now be attached with supported bridge commands, one Matrix account
+can own both relay logins, and current Go bridges can operate in encrypted
+Matrix rooms.
 
-Hopefully this article will help bring more communities closer together, and perhaps inspires people to go and explore the exciting world of Matrix.
-
-
-[^simcard]: Signal still requires users to identify theselves with a phone number. Though there have been [some](https://community.signalusers.org/t/registration-without-a-phone-number/2222) [mentions](https://community.signalusers.org/t/hide-phone-number-entirely/17192/15) of people working on not requiring a phone number for identity, nothing has come to fruition yet.
-
-[^phoneforsignal]: As tempting as it is to place the Relay accounts onto a decade-old Android phone collecting dust in your junk drawer, our experience has shown that a pretty modern device is required to be able to bridge the Signal account. This is because Signal's QR code reader curiously requires quite some computational power.
-
-[^lotr]: ...and in darkness bind them.
-
-[^installmatrix]: If you have more money than time, you could also consider having someone else host your Matrix infrastructure. For instance: https://element.io/element-one
-
-[^set-relay]: These commands should be typed by the Relay users. Otherwise the user who types this command will be the account to deliver messages.
-
-[^bots-login]: To avoid the hassle of switching back and forth between accounts, it is a good idea to use a different device for these manipulations. Or if you are using a web-based client, your browser's Private mode can help too.
-
-[^screenshot-edited]: These screenshots have been edited to have a name of the Whatsapp Relay and Signal Relay accounts consistent with the text of the manual. In reality, our test user decided to call his relay accounts "Whisky". We do not judge him.
+The bargain has not changed: you gain interoperability by operating trusted
+middleware that can read and retransmit the conversation. If that trust model is
+acceptable, the result is a practical escape hatch from two walled gardens. If
+it is not, no amount of YAML will alchemize the arrangement into end-to-end
+encryption.
