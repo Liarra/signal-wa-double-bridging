@@ -101,7 +101,7 @@ Locate the Signal group you want to bridge. Send a message to that group from th
 #### Whatsapp
 Locate the Whatsapp group you want to bridge and send a message to it if its Matrix portal room does not exist yet. In that Whatsapp portal room, send `!wa id` and save the remote chat ID returned by the bridge.
 
-Return to the Signal portal room and invite the Whatsapp Bridge Bot (`@whatsappbot:YOUR_DOMAIN`). Make sure it has enough power to manage the portal; a room or bridge administrator can use `!wa set-pl 100`.
+Return to the Signal portal room and invite the Whatsapp Bridge Bot (`@whatsappbot:YOUR_DOMAIN`). Make sure it has enough power to manage the portal; you can do this by promoting the `@whatsappebot` to "Moderator" in "Room info" > "Settings" > "Roles and permissions" (in Element; this may vary by client).
 
 The Whatsapp group already has its own Matrix portal, so attaching it to the Signal portal requires the overwrite option:
 
