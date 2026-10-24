@@ -64,7 +64,7 @@ Relay Accounts will *relay* messages between Whatsapp and Signal. This means tha
 
 ## Steps
 
-> **Note:** This manual was last checked against current Go/bridgev2 releases in August 2026. The supported `bridge` workflow below requires mautrix bridge version 26.04 or newer. If you run an older version, upgrade it rather than applying database edits from older versions of this article.
+> **Note:** This manual was last checked against current Go/bridgev2 releases in October 2026. The `bridge` command exists in bridge releases v26.04 and newer, but the `--overwrite` workflow below should be used with mautrix-whatsapp and mautrix-signal v26.10 or newer, which include a fix for a deadlock when overwriting an existing portal. Upgrade instead of applying database edits from older versions of this article.
 
 ### 0. Installation
 Install a Matrix server and bridges for Signal and Whatsapp[^installmatrix]. The easy way to do this is by using this super helpful Ansible playbook: https://github.com/spantaleev/matrix-docker-ansible-deploy. We went for a default Synapse homeserver and enabled the bridges as described in the current docs for [Signal](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-signal.md) and [Whatsapp](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-whatsapp.md); however, the playbook is highly configurable. Make sure to study the playbook's docs so that you don't miss out on any cool tweaks or features.
@@ -131,6 +131,8 @@ The Signal portal room is now _"double bridged"_. Try sending messages from Elem
 
 #### If you create both chats from scratch
 It is better to start on the Whatsapp side. Create and populate the Whatsapp chat first, let its Matrix portal room appear, invite the Signal Bridge Bot to that portal, and make sure that the room has a name no longer than 32 characters. Then send `!signal create` in the Whatsapp portal. `create` remains an alias of the current `create-group` command.
+
+Whatsapp participants are not copied into Signal: after creating the Signal group, populate it separately on the Signal side.
 
 Starting with Signal and then sending `!wa create`, as older versions of this manual suggested, may now fail: current mautrix-whatsapp requires at least one additional Whatsapp-resolvable participant when it creates a group, and Signal ghosts do not count.
 
@@ -249,7 +251,7 @@ At the time of publishing this article, our bridged chat has existed for 8 month
 Hopefully this article will help bring more communities closer together, and perhaps inspires people to go and explore the exciting world of Matrix.
 
 
-[^simcard]: Signal still requires a phone number for registration, although current usernames and phone-number privacy settings let people connect without exposing or searching by that number.
+[^simcard]: Signal normally uses a phone number for registration. Signal Android beta also supports paid phone-numberless registration through Signal Login, and mautrix-signal supports those accounts since v26.10. A spare number is still required for the Whatsapp Relay.
 
 [^phoneforsignal]: Signal must first be registered in the official mobile app. Current mautrix-signal then links as a secondary device by scanning a QR code from the app's Linked Devices screen.
 
