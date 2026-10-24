@@ -122,7 +122,7 @@ It is better to start on the Whatsapp side. Create and populate the Whatsapp cha
 
 Whatsapp participants are not copied into Signal: after creating the Signal group, populate it separately on the Signal side.
 
-Starting with Signal and then sending `!wa create`, as older versions of this manual suggested, may now fail: current mautrix-whatsapp requires at least one additional Whatsapp-resolvable participant when it creates a group, and Signal ghosts do not count.
+Starting with Signal and then sending `!wa create` may fail: current mautrix-whatsapp requires at least one additional Whatsapp-resolvable participant when it creates a group, and Signal ghosts do not count.
 
 Nice, we are almost there! Now the last bit: enabling relaying of messages for people who lack a Signal or Whatsapp account.
 
