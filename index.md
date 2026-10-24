@@ -51,7 +51,7 @@ To summarise: we are going to create a Matrix room and bridge it to a Whatsapp c
 ## Pre-requisites
 
 1. **A server on which you can install Matrix software.**
-This can be a Virtual Private Server (VPS), or your old laptop. The important thing is that it has a dedicated external IP address. [Check out the detailed requirements.](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/prerequisites.md)
+This can be a Virtual Private Server (VPS), or your old laptop. The important thing is that it has a dedicated external IP address. [Check out the detailed requirements.](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/prerequisites.md). Make sure you are a matrix admin in order to manage the bridge accounts.
 
 2. **A domain name.** You can use a subdomain of an existing domain name, if you have one.
 
