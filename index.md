@@ -118,7 +118,7 @@ The Signal portal room is now _"double bridged"_. Try sending messages from Elem
 *Screenshots of the same double-bridged Signal group chat displayed in Whatsapp, Element and Signal, side by side.*
 
 #### If you create both chats from scratch
-It is better to start on the Whatsapp side. Create and populate the Whatsapp chat first, let its Matrix portal room appear, invite the Signal Bridge Bot to that portal, and make sure that the room has a name no longer than 32 characters. Then send `!signal create` in the Whatsapp portal. `create` remains an alias of the current `create-group` command.
+It is better to start on the Whatsapp side. Create and populate the Whatsapp chat first, let its Matrix portal room appear, invite the Signal Bridge Bot to that portal, and make sure that the room has a name no longer than 32 characters. Then send `!signal create` in the Whatsapp portal.
 
 Whatsapp participants are not copied into Signal: after creating the Signal group, populate it separately on the Signal side.
 
