@@ -64,7 +64,7 @@ Relay Accounts will *relay* messages between Whatsapp and Signal. This means tha
 
 ## Steps
 
-> **Note:** This manual was last checked against current Go/bridgev2 releases in October 2026. The `bridge` command exists in bridge releases v26.04 and newer, but the `--overwrite` workflow below should be used with mautrix-whatsapp and mautrix-signal v26.10 or newer, which include a fix for a deadlock when overwriting an existing portal. Upgrade instead of applying database edits from older versions of this article.
+> **Note:** This manual was last checked against current Go/bridgev2 releases in October 2026. 
 
 ### 0. Installation
 Install a Matrix server and bridges for Signal and Whatsapp[^installmatrix]. The easy way to do this is by using this super helpful Ansible playbook: https://github.com/spantaleev/matrix-docker-ansible-deploy. We went for a default Synapse homeserver and enabled the bridges as described in the current docs for [Signal](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-signal.md) and [Whatsapp](https://github.com/spantaleev/matrix-docker-ansible-deploy/blob/master/docs/configuring-playbook-bridge-mautrix-whatsapp.md); however, the playbook is highly configurable. Make sure to study the playbook's docs so that you don't miss out on any cool tweaks or features.
